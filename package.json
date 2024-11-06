@@ -1,0 +1,44 @@
+{
+    "name": "sf-packageduplicator",
+    "displayName": "SF Package Duplicator",
+    "description": "Duplica packages con formato CRMLEAD000Y",
+    "version": "0.0.3",
+    "engines": {
+        "vscode": "^1.80.0"
+    },
+    "main": "./out/extension.js",
+    "categories": [
+        "Other"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "extension.duplicatePackage",
+                "title": "Duplicate Package"
+            }
+        ]
+    },
+    "devDependencies": {
+        "@types/node": "^22.9.0",
+        "@types/vscode": "^1.80.0",
+        "typescript": "^5.6.3"
+    },
+    "scripts": {
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/codeDruDev/SF-PackageDuplicator.git"
+    },
+    "license": "MIT",
+    "publisher": "codeDruDev",
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": false,
+            "description": "Esta extensión requiere acceso completo al workspace para funcionar correctamente."
+        }
+    },
+    "icon": "images/icon.png"
+}
