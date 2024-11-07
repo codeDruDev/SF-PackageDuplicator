@@ -1,63 +1,74 @@
 # SF Package Duplicator
 
-Una extensión de Visual Studio Code diseñada para optimizar el flujo de trabajo con archivos package.xml en proyectos Salesforce.
+## 🎯 Descripción
+Extensión de VS Code para automatizar la gestión de archivos package.xml en proyectos Salesforce.
 
-## Características
+## ✨ Características
 
-- 📦 Duplicación automática de package.xml
-- 🎯 Generación de nombres personalizables por proyecto
-- 📁 Selector de carpeta destino
-- 🔄 Restauración automática del package.xml original
-- ⚙️ Configuración por workspace
+### 📦 Duplicación de Packages
+- Duplica package.xml con un solo comando
+- Nombrado automático con formato configurable (default: CRMLEAD000XXX.xml)
+- Selector de carpeta destino
+- Creación de subcarpetas al vuelo
+- Restauración automática del package.xml original
 
-## Instalación
+### 🔄 Combinación de Packages
+- Combina múltiples package.xml en uno solo
+- Dos modos de selección:
+  - Por carpeta: fusiona todos los XML de una carpeta
+  - Manual: selección específica de archivos
+- Nombre personalizable para el archivo resultante
+- Elimina automáticamente elementos duplicados
 
-1. Descarga el archivo `.vsix`
-2. En VS Code, presiona `Ctrl+Shift+P` (o `Cmd+Shift+P` en Mac)
-3. Busca "Extensions: Install from VSIX"
-4. Selecciona el archivo descargado
+### ⚙️ Configuración
+- Prefijo personalizable por proyecto
+- Sufijo opcional configurable
+- Configuración independiente por workspace
 
-## Uso
+## 🚀 Instalación
+
+1. Descarga la última versión desde [GitHub Releases](https://github.com/codeDruDev/SF-PackageDuplicator/releases/tag/1.1.2)
+2. Instala el archivo .vsix en VS Code
+3. Recarga VS Code
+
+## 📝 Uso
 
 ### Duplicar Package
-1. Abre el archivo `manifest/package.xml`
-2. Realiza tus modificaciones
-3. Presiona `Ctrl+Shift+P`
-4. Ejecuta `SF: Duplicate Package`
-5. Ingresa el número de ticket
-6. Selecciona la carpeta destino
+1. Abre el comando palette (Ctrl/Cmd + Shift + P)
+2. Ejecuta `SF: Duplicate Package`
+3. Ingresa el número de ticket
+4. Selecciona o crea la carpeta destino
 
-### Configurar Formato de Archivo
-1. Presiona `Ctrl+Shift+P`
-2. Ejecuta `SF: Configure Package Duplicator`
-3. Configura:
-   - Prefijo (ej: "CRMLEAD000")
-   - Sufijo (opcional)
+### Combinar Packages
+1. Abre el comando palette
+2. Ejecuta `SF: Merge Packages`
+3. Elige modo de selección (carpeta o archivos)
+4. Selecciona los archivos a combinar
+5. Define el nombre del archivo resultante
 
-## Ejemplos de Configuración
+### Configurar
+1. Ejecuta `SF: Configure Package Duplicator`
+2. Define el prefijo y sufijo deseados
 
-- **Configuración Estándar**:
-  - Prefijo: "CRMLEAD000"
-  - Resultado: `CRMLEAD000123.xml`
+## ⚙️ Configuración
 
-- **Con Sufijo**:
-  - Prefijo: "TICKET-"
-  - Sufijo: "-SFDC"
-  - Resultado: `TICKET-123-SFDC.xml`
+```json
+{
+    "packageDuplicator.filePrefix": "CRMLEAD000",
+    "packageDuplicator.fileSuffix": ""
+}
+```
 
-## Requisitos
+## 📋 Requisitos
+- VS Code 1.80.0 o superior
+- Git (recomendado)
 
-- Visual Studio Code 1.93.0 o superior
-- Git instalado en el sistema
+## 🤝 Contribuir
+¿Tienes ideas para mejorar la extensión? ¡Las contribuciones son bienvenidas!
 
-## Configuración por Workspace
+1. Fork el repositorio
+2. Crea una rama para tu feature
+3. Envía un pull request
 
-La extensión guarda la configuración por workspace, permitiendo diferentes formatos de nombre para distintos proyectos.
-
-## Contribuir
-
-Las contribuciones son bienvenidas. Por favor, abre un issue o pull request en el [repositorio](https://github.com/codeDruDev/SF-PackageDuplicator).
-
-## Licencia
-
-[MIT](LICENSE)
+## 📄 Licencia
+MIT License - ver [LICENSE](LICENSE) para más detalles.

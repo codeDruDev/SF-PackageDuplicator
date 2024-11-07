@@ -1,7 +1,7 @@
 {
     "name": "sf-packageduplicator",
     "displayName": "SF Package Duplicator",
-    "description": "Duplica packages con formato CRMLEAD000Y",
+    "description": "Herramienta para duplicar y combinar package.xml en proyectos Salesforce",
     "version": "1.1.2",
     "engines": {
         "vscode": "^1.80.0"
@@ -17,7 +17,10 @@
         "package",
         "xml",
         "duplicate",
-        "manifest"
+        "manifest",
+        "merge",
+        "combine",
+        "crm"
     ],
     "contributes": {
         "commands": [
