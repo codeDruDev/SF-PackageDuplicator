@@ -99,21 +99,20 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         try {
-            // Obtener lista de carpetas y añadir la opción de manifest
-            const folders = ['manifest', ...fs.readdirSync(manifestFolder)
-                .filter(item => {
-                    try {
-                        return fs.statSync(path.join(manifestFolder, item)).isDirectory();
-                    } catch (error) {
-                        return false;
-                    }
-                })];
+            // Obtener lista de carpetas y añadir opciones especiales
+            const folders = [
+                'manifest',
+                '+ Crear nueva carpeta',
+                ...fs.readdirSync(manifestFolder)
+                    .filter(item => {
+                        try {
+                            return fs.statSync(path.join(manifestFolder, item)).isDirectory();
+                        } catch (error) {
+                            return false;
+                        }
+                    })
+            ];
 
-            if (folders.length === 0) {
-                vscode.window.showErrorMessage('No se encontraron carpetas disponibles.');
-                return;
-            }
-            
             const selectedFolder = await vscode.window.showQuickPick(folders, {
                 placeHolder: 'Selecciona la carpeta destino'
             });
@@ -122,15 +121,40 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            let targetFolder = selectedFolder;
+            
+            // Si selecciona crear nueva carpeta
+            if (selectedFolder === '+ Crear nueva carpeta') {
+                const newFolderName = await vscode.window.showInputBox({
+                    prompt: 'Ingresa el nombre de la nueva carpeta',
+                    placeHolder: 'Ejemplo: feature-123'
+                });
+
+                if (!newFolderName) {
+                    return;
+                }
+
+                const newFolderPath = path.join(manifestFolder, newFolderName);
+                
+                try {
+                    fs.mkdirSync(newFolderPath);
+                    targetFolder = newFolderName;
+                } catch (error) {
+                    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+                    vscode.window.showErrorMessage(`Error al crear la carpeta: ${errorMessage}`);
+                    return;
+                }
+            }
+
             // Obtener configuración del proyecto
             const config = await getProjectConfig(workspaceFolder);
 
             // Crear nuevo nombre de archivo con la configuración
             const newFileName = `${config.prefix}${ticketNumber}${config.suffix}.xml`;
             // Si es 'manifest', guardamos directamente en la carpeta manifest
-            const targetPath = selectedFolder === 'manifest' 
+            const targetPath = targetFolder === 'manifest' 
                 ? path.join(manifestFolder, newFileName)
-                : path.join(manifestFolder, selectedFolder, newFileName);
+                : path.join(manifestFolder, targetFolder, newFileName);
 
             try {
                 fs.copyFileSync(packageXmlPath, targetPath);
