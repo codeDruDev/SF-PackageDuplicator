@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { DOMParser } from 'xmldom';
 
 const execAsync = promisify(exec);
 
@@ -61,6 +62,50 @@ async function revertPackageXmlIfChanged(workspacePath: string): Promise<void> {
         console.error('Error al revertir package.xml:', errorMessage);
         vscode.window.showErrorMessage('Error al intentar revertir package.xml');
     }
+}
+
+// Añadir esta función helper
+function mergePackageXmls(xmlFiles: string[]): string {
+    const parser = new DOMParser();
+    let mergedTypes: { [key: string]: Set<string> } = {};
+
+    xmlFiles.forEach(xmlContent => {
+        const doc = parser.parseFromString(xmlContent, 'text/xml');
+        const types = doc.getElementsByTagName('types');
+
+        for (const type of Array.from(types)) {
+            const name = type.getElementsByTagName('name')[0].textContent;
+            const members = Array.from(type.getElementsByTagName('members'))
+                .map(member => member.textContent);
+
+            if (name) {
+                if (!mergedTypes[name]) {
+                    mergedTypes[name] = new Set();
+                }
+                members.forEach(member => {
+                    if (member) mergedTypes[name].add(member);
+                });
+            }
+        }
+    });
+
+    // Crear el XML combinado
+    let result = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    result += '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n';
+    
+    Object.entries(mergedTypes).forEach(([name, members]) => {
+        result += '\t<types>\n';
+        Array.from(members).sort().forEach(member => {
+            result += `\t\t<members>${member}</members>\n`;
+        });
+        result += `\t\t<name>${name}</name>\n`;
+        result += '\t</types>\n';
+    });
+    
+    result += '\t<version>60.0</version>\n';
+    result += '</Package>';
+
+    return result;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -173,5 +218,121 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(disposable, configCommand);
+    // Añadir el nuevo comando en activate()
+    let mergeCommand = vscode.commands.registerCommand('extension.mergePackages', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No se encontró la carpeta del workspace');
+            return;
+        }
+
+        const manifestFolder = path.join(workspaceFolder.uri.fsPath, 'manifest');
+
+        // Preguntar el modo de selección
+        const selectionMode = await vscode.window.showQuickPick(
+            [
+                { label: 'Seleccionar archivos individuales', value: 'files' },
+                { label: 'Seleccionar carpeta completa', value: 'folder' }
+            ],
+            { placeHolder: '¿Cómo quieres seleccionar los archivos a combinar?' }
+        );
+
+        if (!selectionMode) return;
+
+        try {
+            let xmlFiles: string[] = [];
+
+            if (selectionMode.value === 'folder') {
+                // Obtener lista de carpetas
+                const folders = ['manifest', ...fs.readdirSync(manifestFolder)
+                    .filter(item => {
+                        try {
+                            return fs.statSync(path.join(manifestFolder, item)).isDirectory();
+                        } catch (error) {
+                            return false;
+                        }
+                    })];
+
+                const selectedFolder = await vscode.window.showQuickPick(folders, {
+                    placeHolder: 'Selecciona la carpeta que contiene los archivos a combinar'
+                });
+
+                if (!selectedFolder) return;
+
+                const folderPath = selectedFolder === 'manifest' 
+                    ? manifestFolder 
+                    : path.join(manifestFolder, selectedFolder);
+
+                // Leer todos los XML de la carpeta seleccionada
+                xmlFiles = fs.readdirSync(folderPath)
+                    .filter(file => file.endsWith('.xml'))
+                    .map(file => path.join(folderPath, file));
+
+                if (xmlFiles.length < 2) {
+                    vscode.window.showInformationMessage('Se necesitan al menos 2 archivos XML en la carpeta para combinar');
+                    return;
+                }
+            } else {
+                // Modo selección de archivos individual (código existente)
+                const processDirectory = (dir: string) => {
+                    const items = fs.readdirSync(dir);
+                    items.forEach(item => {
+                        const fullPath = path.join(dir, item);
+                        if (fs.statSync(fullPath).isDirectory()) {
+                            processDirectory(fullPath);
+                        } else if (item.endsWith('.xml')) {
+                            xmlFiles.push(fullPath);
+                        }
+                    });
+                };
+                processDirectory(manifestFolder);
+
+                const fileItems = xmlFiles.map(file => ({
+                    label: path.relative(manifestFolder, file),
+                    path: file
+                }));
+
+                const selectedFiles = await vscode.window.showQuickPick(fileItems, {
+                    canPickMany: true,
+                    placeHolder: 'Selecciona los archivos package.xml a combinar'
+                });
+
+                if (!selectedFiles || selectedFiles.length < 2) {
+                    vscode.window.showInformationMessage('Debes seleccionar al menos 2 archivos para combinar');
+                    return;
+                }
+
+                xmlFiles = selectedFiles.map(file => file.path);
+            }
+
+            // Leer y combinar los archivos
+            const xmlContents = xmlFiles.map(file => fs.readFileSync(file, 'utf8'));
+            const mergedContent = mergePackageXmls(xmlContents);
+
+            // Solicitar nombre del archivo
+            const defaultFileName = `merged-package-${new Date().toISOString().replace(/[:.]/g, '-')}.xml`;
+            const fileName = await vscode.window.showInputBox({
+                prompt: 'Ingresa el nombre para el archivo combinado',
+                placeHolder: 'Ejemplo: merged-feature-123.xml',
+                value: defaultFileName
+            });
+
+            if (!fileName) {
+                return;
+            }
+
+            // Asegurar que el archivo termine en .xml
+            const finalFileName = fileName.endsWith('.xml') ? fileName : `${fileName}.xml`;
+            const newFilePath = path.join(manifestFolder, finalFileName);
+
+            fs.writeFileSync(newFilePath, mergedContent);
+            vscode.window.showInformationMessage(`Archivos combinados en: ${finalFileName}`);
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+            vscode.window.showErrorMessage(`Error al combinar archivos: ${errorMessage}`);
+        }
+    });
+
+    context.subscriptions.push(disposable, configCommand, mergeCommand);
 }
