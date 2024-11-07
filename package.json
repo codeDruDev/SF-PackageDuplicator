@@ -2,21 +2,51 @@
     "name": "sf-packageduplicator",
     "displayName": "SF Package Duplicator",
     "description": "Duplica packages con formato CRMLEAD000Y",
-    "version": "0.0.3",
+    "version": "1.0.1",
     "engines": {
         "vscode": "^1.80.0"
     },
     "main": "./out/extension.js",
     "categories": [
-        "Other"
+        "Other",
+        "Snippets",
+        "Formatters"
+    ],
+    "keywords": [
+        "salesforce",
+        "package",
+        "xml",
+        "duplicate",
+        "manifest"
     ],
     "contributes": {
         "commands": [
             {
                 "command": "extension.duplicatePackage",
-                "title": "Duplicate Package"
+                "title": "SF: Duplicate Package"
+            },
+            {
+                "command": "extension.configurePackageDuplicator",
+                "title": "SF: Configure Package Duplicator"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "SF Package Duplicator",
+            "properties": {
+                "packageDuplicator.filePrefix": {
+                    "type": "string",
+                    "default": "CRMLEAD000",
+                    "description": "Prefijo para los archivos generados (incluyendo ceros si son necesarios)",
+                    "scope": "resource"
+                },
+                "packageDuplicator.fileSuffix": {
+                    "type": "string",
+                    "default": "",
+                    "description": "Sufijo para los archivos generados (opcional)",
+                    "scope": "resource"
+                }
+            }
+        }
     },
     "devDependencies": {
         "@types/node": "^22.9.0",
