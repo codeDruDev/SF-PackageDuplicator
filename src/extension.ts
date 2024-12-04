@@ -108,6 +108,321 @@ function mergePackageXmls(xmlFiles: string[]): string {
     return result;
 }
 
+async function buildPackageFromGitChanges(workspaceFolder: vscode.WorkspaceFolder) {
+    try {
+        // Obtener cambios de Git
+        const { stdout } = await execAsync('git diff --name-status HEAD', {
+            cwd: workspaceFolder.uri.fsPath
+        });
+
+        if (!stdout.trim()) {
+            vscode.window.showInformationMessage('No se detectaron cambios en Git');
+            return;
+        }
+
+        // Procesar los cambios de Git
+        const changes = stdout.split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+                const [status, file] = line.trim().split(/\s+/);
+                return { status, file };
+            })
+            .filter(change => change.file && change.file.startsWith('force-app/'));
+
+        if (changes.length === 0) {
+            vscode.window.showInformationMessage('No se encontraron cambios en archivos de Salesforce');
+            return;
+        }
+
+        // Añadir estos logs después de procesar los cambios
+        console.log('Cambios detectados:', changes);
+        
+        // Mapear los cambios a metadatos de Salesforce
+        const metadataMap: { [key: string]: Set<string> } = {};
+        
+        changes.forEach(change => {
+            log('Procesando archivo: ' + change.file);
+            // Normalizar los separadores de ruta a forward slashes
+            const normalizedPath = change.file.replace(/\\/g, '/');
+            const parts = normalizedPath.split('/');
+            log('Partes de la ruta: ' + JSON.stringify(parts));
+            if (parts.length >= 4) {
+                // Buscar el índice del tipo de metadato (classes, flows, etc.)
+                const metadataFolders = ['classes', 'flows', 'triggers', 'pages', 'components', 'objects', 'layouts'];
+                const metadataTypeIndex = parts.findIndex(part => metadataFolders.includes(part));
+                
+                if (metadataTypeIndex !== -1) {
+                    const metadataType = parts[metadataTypeIndex];
+                    let fileName = parts[parts.length - 1];
+                    
+                    // Remover extensiones comunes
+                    fileName = fileName.replace('.cls', '')
+                                    .replace('.flow-meta.xml', '')
+                                    .replace('.trigger', '')
+                                    .replace('.page', '')
+                                    .replace('.component', '')
+                                    .replace('.object-meta.xml', '');
+                    
+                    const apiName = mapMetadataType(metadataType);
+                    log(`Tipo de metadato: ${metadataType} -> ${apiName}`);
+                    if (apiName) {
+                        if (!metadataMap[apiName]) {
+                            metadataMap[apiName] = new Set();
+                        }
+                        metadataMap[apiName].add(fileName);
+                    }
+                }
+            }
+        });
+        log('Mapa de metadatos final: ' + JSON.stringify(Object.fromEntries(
+            Object.entries(metadataMap).map(([k, v]) => [k, Array.from(v)])
+        ), null, 2));
+
+        // Preguntar al usuario qué acción desea realizar
+        const opcion = await vscode.window.showQuickPick(
+            [
+                { label: 'Crear nuevo package.xml', description: 'Crea un nuevo archivo con los cambios de Git' },
+                { label: 'Modificar package.xml existente', description: 'Añade los cambios al package.xml actual' },
+                { label: 'Duplicar y añadir cambios', description: 'Duplica el package.xml y añade los cambios de Git' }
+            ],
+            { placeHolder: '¿Qué acción deseas realizar con los cambios detectados?' }
+        );
+
+        if (!opcion) {
+            return; // Usuario canceló la selección
+        }
+
+        switch (opcion.label) {
+            case 'Crear nuevo package.xml':
+                const fileName = await vscode.window.showInputBox({
+                    prompt: 'Introduce el nombre para el nuevo package.xml',
+                    placeHolder: 'ejemplo: mi-package.xml',
+                    value: `git-changes-${new Date().toISOString().replace(/[:.]/g, '-')}.xml`,
+                    validateInput: (value) => {
+                        if (!value) {
+                            return 'El nombre del archivo es requerido';
+                        }
+                        if (!value.endsWith('.xml')) {
+                            return 'El archivo debe tener extensión .xml';
+                        }
+                        return null;
+                    }
+                });
+
+                if (!fileName) {
+                    vscode.window.showInformationMessage('Operación cancelada');
+                    return;
+                }
+                await createNewPackage(workspaceFolder, metadataMap, fileName);
+                break;
+            
+            case 'Modificar package.xml existente':
+                await modifyExistingPackage(workspaceFolder, metadataMap);
+                break;
+            
+            case 'Duplicar y añadir cambios':
+                await duplicateAndAddChanges(workspaceFolder, metadataMap);
+                break;
+        }
+
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+        vscode.window.showErrorMessage(`Error al procesar los cambios: ${errorMessage}`);
+    }
+}
+
+async function createNewPackage(workspaceFolder: vscode.WorkspaceFolder, metadataMap: { [key: string]: Set<string> }, fileName: string) {
+    let packageXml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    packageXml += '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n';
+
+    Object.entries(metadataMap).sort().forEach(([type, members]) => {
+        packageXml += '\t<types>\n';
+        Array.from(members).sort().forEach(member => {
+            packageXml += `\t\t<members>${member}</members>\n`;
+        });
+        packageXml += `\t\t<name>${type}</name>\n`;
+        packageXml += '\t</types>\n';
+    });
+
+    packageXml += '\t<version>60.0</version>\n';
+    packageXml += '</Package>';
+
+    const manifestFolder = path.join(workspaceFolder.uri.fsPath, 'manifest');
+    const filePath = path.join(manifestFolder, fileName);
+
+    // Verificar si el archivo ya existe
+    if (fs.existsSync(filePath)) {
+        const overwrite = await vscode.window.showWarningMessage(
+            `El archivo ${fileName} ya existe. ¿Deseas sobrescribirlo?`,
+            'Sí',
+            'No'
+        );
+        
+        if (overwrite !== 'Sí') {
+            vscode.window.showInformationMessage('Operación cancelada');
+            return;
+        }
+    }
+
+    fs.writeFileSync(filePath, packageXml);
+    vscode.window.showInformationMessage(`Package.xml creado: ${fileName}`);
+}
+
+async function modifyExistingPackage(workspaceFolder: vscode.WorkspaceFolder, metadataMap: { [key: string]: Set<string> }) {
+    const packagePath = path.join(workspaceFolder.uri.fsPath, 'manifest', 'package.xml');
+    const parser = new DOMParser();
+    const xmlContent = fs.readFileSync(packagePath, 'utf-8');
+    const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+
+    // Crear un mapa para almacenar todos los miembros existentes
+    const existingMembers: { [key: string]: Set<string> } = {};
+
+    // Leer los miembros existentes
+    Array.from(xmlDoc.getElementsByTagName('types')).forEach(typeElement => {
+        const typeName = typeElement.getElementsByTagName('name')[0]?.textContent;
+        if (typeName) {
+            existingMembers[typeName] = new Set(
+                Array.from(typeElement.getElementsByTagName('members'))
+                    .map(member => member.textContent)
+                    .filter(content => content !== null) as string[]
+            );
+        }
+    });
+
+    // Combinar con los nuevos miembros
+    Object.entries(metadataMap).forEach(([type, members]) => {
+        if (!existingMembers[type]) {
+            existingMembers[type] = new Set();
+        }
+        members.forEach(member => existingMembers[type].add(member));
+    });
+
+    // Crear nuevo XML con formato correcto
+    let newXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+    newXml += '<Package xmlns="http://soap.sforce.com/2006/04/metadata">\n';
+
+    // Ordenar los tipos y sus miembros
+    Object.keys(existingMembers).sort().forEach(type => {
+        newXml += '\t<types>\n';
+        Array.from(existingMembers[type]).sort().forEach(member => {
+            newXml += `\t\t<members>${member}</members>\n`;
+        });
+        newXml += `\t\t<name>${type}</name>\n`;
+        newXml += '\t</types>\n';
+    });
+
+    newXml += '\t<version>60.0</version>\n';
+    newXml += '</Package>';
+
+    // Guardar los cambios
+    fs.writeFileSync(packagePath, newXml);
+    vscode.window.showInformationMessage('Package.xml modificado exitosamente');
+}
+
+async function duplicateAndAddChanges(workspaceFolder: vscode.WorkspaceFolder, metadataMap: { [key: string]: Set<string> }) {
+    // Primero duplicar el package usando el comando existente
+    await vscode.commands.executeCommand('extension.duplicatePackage');
+    
+    // Esperar un momento para asegurar que el archivo se ha creado
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // Obtener el último archivo creado en la carpeta manifest
+    const manifestFolder = path.join(workspaceFolder.uri.fsPath, 'manifest');
+    const files = fs.readdirSync(manifestFolder)
+        .filter(file => file.endsWith('.xml'))
+        .map(file => ({
+            name: file,
+            time: fs.statSync(path.join(manifestFolder, file)).mtime.getTime()
+        }))
+        .sort((a, b) => b.time - a.time);
+
+    if (files.length > 0) {
+        const lastFile = files[0].name;
+        const packagePath = path.join(manifestFolder, lastFile);
+        
+        // Modificar el archivo duplicado con los cambios de Git
+        const parser = new DOMParser();
+        const xmlContent = fs.readFileSync(packagePath, 'utf-8');
+        const xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+
+        // Añadir los nuevos elementos
+        Object.entries(metadataMap).forEach(([type, members]) => {
+            let typeElement = Array.from(xmlDoc.getElementsByTagName('types'))
+                .find(elem => elem.getElementsByTagName('name')[0]?.textContent === type);
+
+            if (!typeElement) {
+                typeElement = xmlDoc.createElement('types');
+                const nameElem = xmlDoc.createElement('name');
+                nameElem.textContent = type;
+                typeElement.appendChild(nameElem);
+                xmlDoc.documentElement.insertBefore(typeElement, xmlDoc.getElementsByTagName('version')[0]);
+            }
+
+            members.forEach(member => {
+                const memberElem = xmlDoc.createElement('members');
+                memberElem.textContent = member;
+                typeElement.insertBefore(memberElem, typeElement.getElementsByTagName('name')[0]);
+            });
+        });
+
+        // Guardar los cambios
+        fs.writeFileSync(packagePath, xmlDoc.toString());
+        vscode.window.showInformationMessage(`Package duplicado y modificado: ${lastFile}`);
+    }
+}
+
+// Función auxiliar para mapear tipos de metadatos
+function mapMetadataType(folderName: string): string {
+    const metadataMapping: { [key: string]: string } = {
+        'classes': 'ApexClass',
+        'triggers': 'ApexTrigger',
+        'pages': 'ApexPage',
+        'components': 'ApexComponent',
+        'objects': 'CustomObject',
+        'layouts': 'Layout',
+        'workflows': 'Workflow',
+        'profiles': 'Profile',
+        'permissionsets': 'PermissionSet',
+        'labels': 'CustomLabels',
+        'staticresources': 'StaticResource',
+        'aura': 'AuraDefinitionBundle',
+        'lwc': 'LightningComponentBundle',
+        'flows': 'Flow',
+        'flowDefinitions': 'FlowDefinition',
+        'applications': 'CustomApplication',
+        'email': 'EmailTemplate',
+        'reports': 'Report',
+        'dashboards': 'Dashboard',
+        'tabs': 'CustomTab',
+        'settings': 'Settings',
+        'customMetadata': 'CustomMetadata',
+        'globalValueSets': 'GlobalValueSet',
+        'queues': 'Queue',
+        'quickActions': 'QuickAction',
+        'sharingRules': 'SharingRules',
+        'weblinks': 'CustomPageWebLink'
+    };
+
+    const result = metadataMapping[folderName];
+    if (!result) {
+        console.log(`Tipo de metadato no mapeado: ${folderName}`);
+    }
+    return result || '';
+}
+
+// Crear un canal de salida para los logs
+const outputChannel = vscode.window.createOutputChannel('SF Package Duplicator');
+
+// Función helper para logging
+function log(message: string) {
+    outputChannel.appendLine(message);
+    if (typeof message === 'object') {
+        outputChannel.appendLine(JSON.stringify(message, null, 2));
+    } else {
+        outputChannel.appendLine(message.toString());
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
     let configCommand = vscode.commands.registerCommand('extension.configurePackageDuplicator', async () => {
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -334,5 +649,14 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(disposable, configCommand, mergeCommand);
+    let gitChangesCommand = vscode.commands.registerCommand('extension.buildPackageFromGit', async () => {
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No se encontró la carpeta del workspace');
+            return;
+        }
+        await buildPackageFromGitChanges(workspaceFolder);
+    });
+
+    context.subscriptions.push(disposable, configCommand, mergeCommand, gitChangesCommand);
 }

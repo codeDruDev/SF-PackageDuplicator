@@ -2,7 +2,7 @@
     "name": "sf-packageduplicator",
     "displayName": "SF Package Duplicator",
     "description": "Herramienta para duplicar y combinar package.xml en proyectos Salesforce",
-    "version": "1.1.2",
+    "version": "1.2.3",
     "engines": {
         "vscode": "^1.80.0"
     },
@@ -35,6 +35,10 @@
             {
                 "command": "extension.mergePackages",
                 "title": "SF: Merge Packages"
+            },
+            {
+                "command": "extension.buildPackageFromGit",
+                "title": "SF: Build Package From Git Changes"
             }
         ],
         "configuration": {

@@ -20,6 +20,15 @@ Extensión de VS Code para automatizar la gestión de archivos package.xml en pr
 - Nombre personalizable para el archivo resultante
 - Elimina automáticamente elementos duplicados
 
+### 🔍 Generación desde Git
+- Crea package.xml basado en cambios de Git
+- Tres modos de operación:
+  - Crear nuevo package.xml
+  - Modificar package.xml existente
+  - Duplicar y añadir cambios
+- Detección automática de tipos de metadatos
+- Mapeo inteligente de componentes Salesforce
+
 ### ⚙️ Configuración
 - Prefijo personalizable por proyecto
 - Sufijo opcional configurable
@@ -27,7 +36,7 @@ Extensión de VS Code para automatizar la gestión de archivos package.xml en pr
 
 ## 🚀 Instalación
 
-1. Descarga la última versión desde [GitHub Releases](https://github.com/codeDruDev/SF-PackageDuplicator/releases/tag/1.1.2)
+1. Descarga la última versión desde [GitHub Releases](https://github.com/codeDruDev/SF-PackageDuplicator/releases/tag/1.2.3)
 2. Instala el archivo .vsix en VS Code
 3. Recarga VS Code
 
@@ -46,6 +55,15 @@ Extensión de VS Code para automatizar la gestión de archivos package.xml en pr
 4. Selecciona los archivos a combinar
 5. Define el nombre del archivo resultante
 
+### Generar desde Git
+1. Abre el comando palette
+2. Ejecuta `SF: Build Package From Git Changes`
+3. Selecciona el modo de operación:
+   - Crear nuevo package.xml
+   - Modificar package.xml existente
+   - Duplicar y añadir cambios
+4. Sigue las instrucciones en pantalla
+
 ### Configurar
 1. Ejecuta `SF: Configure Package Duplicator`
 2. Define el prefijo y sufijo deseados
@@ -61,7 +79,7 @@ Extensión de VS Code para automatizar la gestión de archivos package.xml en pr
 
 ## 📋 Requisitos
 - VS Code 1.80.0 o superior
-- Git (recomendado)
+- Git (requerido)
 
 ## 🤝 Contribuir
 ¿Tienes ideas para mejorar la extensión? ¡Las contribuciones son bienvenidas!
